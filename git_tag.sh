@@ -99,7 +99,7 @@ function git_handle_ready() {
     echo "Current Version With "${CURRENT_VERSION}
     echo "Next Version With "${NEXT_VERSION//v/}
 
-    sed -i -e "s/\(${Product_version_key}[[:space:]]*=[[:space:]]*\"\)${CURRENT_VERSION}\"/\1${NEXT_VERSION}\"/" $VersionFile
+    sed -i -e "s/\(${Product_version_key}[[:space:]]*=[[:space:]]*\"\)${CURRENT_VERSION}\"/\1${NEXT_VERSION//v/}\"/" $VersionFile
 
     if [[ $OS_TYPE == "Darwin" ]]; then
         echo "rm darwin cache"
