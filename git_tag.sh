@@ -97,7 +97,7 @@ function get_pre_del_version_no {
 
 function git_handle_ready() {
     echo "Current Version With "${CURRENT_VERSION}
-    echo "Next Version With "${NEXT_VERSION}
+    echo "Next Version With "${NEXT_VERSION//v/}
 
     sed -i -e "s/\(${Product_version_key}[[:space:]]*=[[:space:]]*\"\)${CURRENT_VERSION}\"/\1${NEXT_VERSION}\"/" $VersionFile
 

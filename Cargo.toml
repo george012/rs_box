@@ -1,6 +1,6 @@
 [package]
 name = "rust_box"
-version = "v0.0.2"
+version = "v0.0.3"
 description = "rust develop box"
 edition = "2021"
 readme = "README.md"
