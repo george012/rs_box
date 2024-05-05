@@ -1,3 +1,6 @@
+mod lib_tests;
+pub mod rs_box_log;
+
 use std::fs;
 use toml::Value;
 pub fn get_version() -> Result<String, Box<dyn std::error::Error>>{
