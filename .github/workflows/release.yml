@@ -55,13 +55,13 @@ jobs:
           cache-name: cache-publish-action
         with:
           path: ~/.cargo
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-v0.2.3
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-v0.2.0
 
       # install publish-action by cargo in github action
       - name: Install publish-action
         if: steps.cache-publish-action.outputs.cache-hit != 'true'
         run: |
-          cargo install publish-action --version=0.2.3
+          cargo install publish-action --version=0.2.0
 
       - name: Run publish-action
         id: publish-action
