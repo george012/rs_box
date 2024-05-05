@@ -1,7 +1,7 @@
 name: Release_Build
 
 env:
-  ProductName: rust_box
+  ProductName: rs_box
 
 on:
   push:

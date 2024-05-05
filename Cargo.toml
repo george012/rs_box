@@ -1,13 +1,13 @@
 [package]
-name = "rust_box"
-version = "0.0.6"
+name = "rs_box"
+version = "0.0.7"
 description = "rust develop box"
 edition = "2021"
 readme = "README.md"
 license-file = "LICENSE"
-documentation = "https://github.com/george012/rust_box"
-homepage = "https://github.com/george012/rust_box"
-repository = "https://github.com/george012/rust_box"
+documentation = "https://github.com/george012/rs_box"
+homepage = "https://github.com/george012/rs_box"
+repository = "https://github.com/george012/rs_box"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
