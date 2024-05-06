@@ -20,7 +20,7 @@ lazy_static! {
 
 struct LoggerManager {
     enable_file_log: bool,
-    log_level: LevelFilter,
+    log_level: log::LevelFilter,
     log_dir: Option<String>,
 }
 
@@ -97,19 +97,19 @@ pub fn setup_log_tools(enable_file_log: bool, log_level: LevelFilter, log_dir: O
     *global_logger = Some(LoggerManager::new(enable_file_log, log_level, log_dir));
 }
 pub fn log_info(message: &str) {
-    info!("{}", message);
+    log::info!("{}", message);
 }
 
 pub fn log_warning(message: &str) {
-    warn!("{}", message);
+    log::warn!("{}", message);
 }
 
 pub fn log_error(message: &str) {
-    error!("{}", message);
+    log::error!("{}",message);
 }
 
 pub fn log_debug(message: &str) {
-    debug!("{}", message);
+    log::debug!("{}", message);
 }
 
 /// 打印[trace]级别日志。
