@@ -1,19 +1,17 @@
 extern crate slog;
 
-use std::env::var;
-use slog::*;
+use std::fs;
+use slog::{Level, o, Drain};
+use slog_term;
 use slog_async::Async;
-use slog_term::TermDecorator;
-use slog_json::Json;
-use std::fs::OpenOptions;
-use std::ops::Deref;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::fs::{File, OpenOptions};
+use std::sync::{Mutex};
 use lazy_static::lazy_static;
-
 lazy_static! {
     static ref GLOBAL_LOG_CONFIG: Mutex<Option<LogConfig>> = Mutex::new(None);
     static ref DEFAULT_LOGGER: Mutex<Option<LoggerManager>> = Mutex::new(None);
 }
+static DEFAULT_CHAIN_SIZE: usize = 1024*2;
 
 #[derive(Clone, Copy, Debug)]
 pub enum LogLevel {
@@ -57,15 +55,35 @@ pub struct LoggerManager {
 
 }
 
-fn default_slog_logger() -> slog::Logger {
+fn create_slog_logger_terminal() -> slog::Logger {
     let decorator = slog_term::TermDecorator::new().stdout().build();
     let drain = slog_term::CompactFormat::new(decorator)
         .use_custom_timestamp(custom_timestamp)
         .build()
         .fuse();
 
-    let drain = slog_async::Async::new(drain).build().fuse();
-    slog::Logger::root(drain, o!())
+    let async_drain = slog_async::Async::new(drain)
+        .chan_size(DEFAULT_CHAIN_SIZE)
+        .build()
+        .fuse();
+
+    slog::Logger::root(async_drain, o!())
+}
+
+fn create_slog_logger_write_file(file: File) -> slog::Logger {
+    let decorator = slog_term::PlainDecorator::new(file);
+
+    let drain = slog_term::FullFormat::new(decorator)
+        .use_custom_timestamp(custom_timestamp)
+        .build()
+        .fuse();
+
+    let drain_file = Async::new(drain)
+        .chan_size(DEFAULT_CHAIN_SIZE)
+        .build()
+        .fuse();
+
+    slog::Logger::root(drain_file, o!())
 }
 
 fn custom_timestamp(w: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -76,7 +94,22 @@ impl LoggerManager {
     pub fn new(model_name: &str) -> LoggerManager {
         let maybe_log_config = GLOBAL_LOG_CONFIG.lock().unwrap();
 
+        let mut a_log_cfg = LogConfig{
+            model_name: model_name.to_string(),
+            enable_save_log_file: false,
+            log_dir: "".to_string(),
+            log_level: LogLevel::LogLevelDebug,
+            log_file_save_type: LogFileSaveType::LogFileSaveTypeDays,
+            log_file_save_days_max: 0,
+        };
+
         let logger = if let Some(ref cfg) = *maybe_log_config {
+            a_log_cfg.log_level                 =cfg.log_level;
+            a_log_cfg.enable_save_log_file      =cfg.enable_save_log_file;
+            a_log_cfg.log_file_save_type        =cfg.log_file_save_type;
+            a_log_cfg.log_file_save_days_max    =cfg.log_file_save_days_max;
+            a_log_cfg.log_dir                   =format!("{}/{}", cfg.log_dir, model_name);
+
             if cfg.enable_save_log_file == true{
                 let file_path = format!("{}/{}/run.log", cfg.log_dir, model_name);
                 // 尝试创建目录，如果目录不存在
@@ -93,30 +126,26 @@ impl LoggerManager {
                     .append(true)
                     .open(file_path)
                     .unwrap();
-
-                let decorator = slog_term::PlainDecorator::new(file);
-
-                let drain = slog_term::FullFormat::new(decorator)
-                    .use_custom_timestamp(custom_timestamp)
-                    .build()
-                    .fuse();
-
-                let drain_file = slog_async::Async::new(drain).build().fuse();
-
-                slog::Logger::root(drain_file, o!())
+                create_slog_logger_write_file(file)
             } else {
-                default_slog_logger()
+                create_slog_logger_terminal()
             }
         } else {
             eprintln!("Global log configuration is not initialized, falling back to console logging.");
-            default_slog_logger()
+            create_slog_logger_terminal()
         };
 
         LoggerManager {
-            log_cfg: None, // 使用已有配置或 None
+            log_cfg: Option::from(a_log_cfg), // 使用已有配置或 None
             logger
         }
     }
+    pub fn log_format(&self, message: &str) {
+        self.logger.log()
+        slog::info!(self.logger, "{}", message);
+    }
+
+
 
     pub fn log_info_f(&self, message: &str) {
         slog::info!(self.logger, "{}", message);
