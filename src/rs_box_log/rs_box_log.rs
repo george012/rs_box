@@ -7,6 +7,7 @@ use slog_async::Async;
 use std::fs::{File, OpenOptions};
 use std::sync::{Mutex};
 use lazy_static::lazy_static;
+use crate::rs_box_log::rs_box_log;
 lazy_static! {
     static ref GLOBAL_LOG_CONFIG: Mutex<Option<LogConfig>> = Mutex::new(None);
     static ref DEFAULT_LOGGER: Mutex<Option<LoggerManager>> = Mutex::new(None);
@@ -87,7 +88,7 @@ fn create_slog_logger_write_file(file: File) -> slog::Logger {
 }
 
 fn custom_timestamp(w: &mut dyn std::io::Write) -> std::io::Result<()> {
-    write!(w, "{}", chrono::prelude::Utc::now().format("utc_%Y-%m-%d_%H:%M:%S"))
+    write!(w, "{}", chrono::prelude::Utc::now().format("UTC %Y-%m-%d_%H:%M:%S"))
 }
 impl LoggerManager {
 
@@ -140,27 +141,40 @@ impl LoggerManager {
             logger
         }
     }
-    pub fn log_format(&self, message: &str) {
-        self.logger.log()
-        slog::info!(self.logger, "{}", message);
+    fn log_format(&self, message: &str,a_log_level: LogLevel) {
+
+        match a_log_level{
+            LogLevel::LogLevelDebug => {
+                slog::debug!(self.logger, "{}", message);
+            }
+            LogLevel::LogLevelError => {
+                slog::error!(self.logger, "{}", message);
+            }
+            LogLevel::LogLevelWarning => {
+                slog::warn!(self.logger, "{}", message);
+            }
+            LogLevel::LogLevelInfo => {
+                slog::info!(self.logger, "{}", message);
+            }
+            LogLevel::LogLevelTrace => {
+                slog::trace!(self.logger, "{}", message);
+            }
+        }
     }
-
-
-
     pub fn log_info_f(&self, message: &str) {
-        slog::info!(self.logger, "{}", message);
+        self.log_format(message,self::LogLevel::LogLevelInfo);
     }
     pub fn log_warning_f(&self, message: &str) {
-        slog::warn!(self.logger, "{}", message);
+        self.log_format(message,self::LogLevel::LogLevelWarning);
     }
     pub fn log_error_f(&self, message: &str) {
-        slog::error!(self.logger, "{}", message);
+        self.log_format(message,self::LogLevel::LogLevelError);
     }
     pub fn log_debug_f(&self, message: &str) {
-        slog::debug!(self.logger, "{}", message);
+        self.log_format(message,self::LogLevel::LogLevelDebug);
     }
     pub fn log_trace_f(&self, message: &str) {
-        slog::trace!(self.logger, "{}", message);
+        self.log_format(message,self::LogLevel::LogLevelTrace);
     }
 }
 

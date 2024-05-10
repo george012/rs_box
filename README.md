@@ -1,10 +1,7 @@
 # rs_box
-
-```
-
+```ignore
 cargo fix --lib -p rs_box --allow-dirty
 
-cargo fix --lib -p rs_box --tests --allow-dirty
 ```
 
 
