@@ -14,7 +14,7 @@ lazy_static! {
 }
 static DEFAULT_CHAIN_SIZE: usize = 1024*2;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum LogLevel {
     LogLevelDebug,
     LogLevelError,
@@ -35,7 +35,7 @@ impl LogLevel {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum LogFileSaveType {
     LogFileSaveTypeDays,
     LogFileSaveTypeHours,

@@ -13,14 +13,13 @@ pub mod rs_box_log;
 use std::fs;
 use toml::Value;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug,PartialEq)]
 pub enum RunMode {
     RunModeUnknown,
     RunModeDebug,
     RunModeRelease,
     RunModeTest,
 }
-
 impl RunMode {
     pub fn to_string(&self) -> &'static str {
         match *self {
