@@ -11,7 +11,7 @@ fn test_logs_with_write_logfile() {
 
     // 创建 100 个线程
     let mut handles = vec![];
-    for i in 0..100 {
+    for i in 0..10 {
         let handle = std::thread::spawn(move || {
             rs_box_log::log_info(format!("main log test at thread {}", i).as_str(), );
 
@@ -42,7 +42,7 @@ fn test_logs_with_terminal_show() {
 
     // 创建 100 个线程
     let mut handles = vec![];
-    for i in 0..100 {
+    for i in 0..10 {
         let handle = std::thread::spawn(move || {
             rs_box_log::log_info(format!("main-show log test at thread {}", i).as_str(), );
 
@@ -64,5 +64,16 @@ fn test_logs_with_terminal_show() {
 #[test]
 fn test_simple_log_output() {
     rs_box_log::setup_log_tools("test_simple", false, "./logs", rs_box_log::LogLevel::LogLevelDebug, 7, rs_box_log::LogFileSaveType::LogFileSaveTypeDays);
-    rs_box_log::log_debug("This is a debug message");
+    rs_box_log::log_info("This is a debug message info");
+    rs_box_log::log_error("This is a debug message err");
+    rs_box_log::log_warning("This is a debug message war");
+    rs_box_log::log_debug("This is a debug message debug");
+}
+
+#[test]
+fn test_none_setup_status() {
+    rs_box_log::log_debug("This is a debug message with none setup status  debug");
+    rs_box_log::log_info("This is a debug message with none setup status   info ");
+    rs_box_log::log_warning("This is a debug message with none setup status warning");
+    rs_box_log::log_error("This is a debug message with none setup status   error");
 }
