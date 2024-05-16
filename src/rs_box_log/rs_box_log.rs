@@ -1,13 +1,16 @@
 use std::fs;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
-use slog::Drain;
+use slog::{Drain, Logger, o, Record, Serializer};
+use slog_async::Async;
+use slog_term::{CompactFormat, TermDecorator, PlainDecorator};
+use std::fs::OpenOptions;
+
 
 lazy_static! {
     static ref GLOBAL_LOG_CONFIG: Mutex<LogConfig> = Mutex::new(LogConfig::default());
-    static ref DEFAULT_LOGGER: Mutex<LoggerManager> = Mutex::new(LoggerManager::new("main"));
+    static ref DEFAULT_LOGGER: Arc<LoggerManager> = Arc::new(LoggerManager::new_log_manager("main"));
 }
-static DEFAULT_CHAIN_SIZE: usize = 1024;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum LogLevel {
@@ -105,43 +108,67 @@ fn create_slog_logger_write_file(file: std::fs::File) -> slog::Logger {
 fn custom_timestamp(w: &mut dyn std::io::Write) -> std::io::Result<()> {
     write!(w, "{}", chrono::prelude::Utc::now().format("UTC %Y-%m-%d_%H:%M:%S"))
 }
-impl LoggerManager {
 
-    // Use a shared global configuration
-    pub fn new(model_name: &str) -> Self {
-        Self::new_with_config(GLOBAL_LOG_CONFIG.lock().unwrap().clone(),model_name)
+// Allow independent configuration
+fn new_log_manager_with_config(config: LogConfig, model_name: &str) -> LoggerManager {
+    let logger = if config.enable_save_log_file {
+        let file_path = format!("{}/{}/run.log", config.log_dir, model_name);
+
+        // 确保日志目录存在
+        if let Some(parent) = std::path::Path::new(&file_path).parent() {
+            if std::fs::create_dir_all(parent).is_err() {
+                eprintln!("Failed to create log directory: {}", parent.display());
+            }
+        }
+
+        // 尝试打开文件
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&file_path) {
+            Ok(file) => create_slog_logger_write_file(file),
+            Err(e) => {
+                eprintln!("Failed to open log file '{}': {}", file_path, e);
+                create_slog_logger_terminal() // Fallback to terminal logging
+            }
+        }
+    } else {
+        create_slog_logger_terminal()
+    };
+
+    LoggerManager {
+        logger,
     }
+}
 
-    // Allow independent configuration
-    fn new_with_config(config: LogConfig,model_name: &str) -> Self {
-        let logger = if config.enable_save_log_file {
+impl LoggerManager {
+    pub fn new_log_manager(model_name: &str) -> LoggerManager {
+        let config = GLOBAL_LOG_CONFIG.lock().unwrap().clone();
+
+        let mut a_logger = create_slog_logger_terminal();
+
+        if config.enable_save_log_file {
             let file_path = format!("{}/{}/run.log", config.log_dir, model_name);
-
             // 确保日志目录存在
             if let Some(parent) = std::path::Path::new(&file_path).parent() {
                 if std::fs::create_dir_all(parent).is_err() {
                     eprintln!("Failed to create log directory: {}", parent.display());
                 }
             }
-
-            // 尝试打开文件
-            match std::fs::OpenOptions::new()
+            let file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .append(true)
-                .open(&file_path) {
-                Ok(file) => create_slog_logger_write_file(file),
-                Err(e) => {
-                    eprintln!("Failed to open log file '{}': {}", file_path, e);
-                    create_slog_logger_terminal() // Fallback to terminal logging
-                }
-            }
-        } else {
-            create_slog_logger_terminal()
-        };
+                .open(file_path)
+                .expect("Unable to open log file");
+
+            a_logger = create_slog_logger_write_file(file);
+
+        }
 
         LoggerManager {
-            logger,
+            logger:a_logger,
         }
     }
 
@@ -204,30 +231,20 @@ pub fn setup_log_tools(product_name: &str, enable_save_log_file: bool, log_dir: 
 }
 
 pub fn log_info(message: &str) {
-    if let logger = DEFAULT_LOGGER.lock().unwrap() {
-        logger.log_info_f(message)
-    }
+    DEFAULT_LOGGER.log_info_f(message);
 }
 
 pub fn log_warning(message: &str) {
-    if let logger = DEFAULT_LOGGER.lock().unwrap() {
-        logger.log_warning_f(message)
-    }
+    DEFAULT_LOGGER.log_warning_f(message);
 }
 
 pub fn log_error(message: &str) {
-    if let logger = DEFAULT_LOGGER.lock().unwrap() {
-        logger.log_error_f(message)
-    }
+    DEFAULT_LOGGER.log_error_f(message);
 }
 pub fn log_debug(message: &str) {
-    if let logger = DEFAULT_LOGGER.lock().unwrap() {
-        logger.log_debug_f(message)
-    }
+    DEFAULT_LOGGER.log_debug_f(message);
 }
 
 pub fn log_trace(message: &str) {
-    if let logger = DEFAULT_LOGGER.lock().unwrap() {
-        logger.log_trace_f(message)
-    }
+    DEFAULT_LOGGER.log_trace_f(message);
 }
