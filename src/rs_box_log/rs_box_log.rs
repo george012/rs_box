@@ -1,11 +1,14 @@
+use std::cmp::PartialEq;
 use chrono::Local;
 use std::fs::{File, OpenOptions, create_dir_all, rename, remove_file};
 use std::io::Write;
 use std::sync::{Mutex, Arc};
 use std::path::{Path, PathBuf};
+use std::ptr::addr_eq;
 use once_cell::sync::Lazy;
 use pathdiff::diff_paths;
 use backtrace;
+use log::debug;
 
 #[derive(Clone, Copy, Debug)]
 pub enum LogFileSaveType {
@@ -13,7 +16,7 @@ pub enum LogFileSaveType {
     LogFileSaveTypeHours,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LogLevel {
     LogLevelInfo,
     LogLevelWarning,
@@ -80,6 +83,7 @@ pub struct LoggerManager {
     current_log_path: Mutex<PathBuf>,
 }
 
+
 impl LoggerManager {
     pub fn default() -> Self {
         let config = GLOBAL_LOG_CONFIG.lock().unwrap().clone();
@@ -137,8 +141,19 @@ impl LoggerManager {
         }
 
         let _ = remove_file(&link_path);
-        if let Err(e) = std::os::unix::fs::symlink(relative_target, link_path) {
-            eprintln!("Failed to create symlink: {}", e);
+
+        #[cfg(target_family = "unix")]
+        {
+            if let Err(e) = std::os::unix::fs::symlink(&relative_target, &link_path) {
+                eprintln!("Failed to create symlink: {}", e);
+            }
+        }
+
+        #[cfg(target_family = "windows")]
+        {
+            if let Err(e) = std::os::windows::fs::symlink_file(&relative_target, &link_path) {
+                eprintln!("Failed to create symlink: {}", e);
+            }
         }
     }
 
@@ -192,16 +207,27 @@ impl LoggerManager {
 
     fn get_caller_info() -> String {
         let backtrace = backtrace::Backtrace::new();
+        let exclude_list = [
+            std::file!(),
+            "backtrace::",
+            "rs_box::rs_box_log::rs_box_log::",
+        ];
         for frame in backtrace.frames().iter().skip(1) { // 跳过第一个堆栈帧
             for symbol in frame.symbols() {
                 if let Some(name) = symbol.name() {
                     let name_str = name.to_string();
-                    if !name_str.contains("log_format") && !name_str.contains("LoggerManager") {
-                        return format!(
-                            "{}:{}",
-                            symbol.filename().unwrap_or_else(|| std::path::Path::new("unknown")).display(),
-                            symbol.lineno().unwrap_or(0)
-                        );
+                    if !exclude_list.iter().any(|&exclude| name_str.contains(exclude)) {
+                        let parts: Vec<&str> = name_str.split("::").collect();
+                        if parts.len() > 2 {
+                            let method_name = parts[parts.len() - 2];
+                            let package_name = parts[..parts.len() - 2].join("::");
+                            return format!(
+                                "[package--->{} method--->{} line--->{}]",
+                                package_name,
+                                method_name,
+                                symbol.lineno().unwrap_or(0)
+                            );
+                        }
                     }
                 }
             }
@@ -223,15 +249,26 @@ impl LoggerManager {
 
             let location_info = LoggerManager::get_caller_info();
 
-            let log_message = format!(
-                "[{}] {}[{}]{} [--{}] [location: {}]\n",
+            let mut log_message = format!(
+                "[{}] {}[{}]{} {} [{}]\n",
                 now.format("%Y-%m-%d %H:%M:%S %:z"),
                 color_code,
                 level.to_str(),
                 reset_code,
-                message,
                 location_info,
+                message,
             );
+
+            if level == LogLevel::LogLevelInfo || level == LogLevel::LogLevelWarning {
+                log_message = format!(
+                    "[{}] {}[{}]{} [{}]\n",
+                    now.format("%Y-%m-%d %H:%M:%S %:z"),
+                    color_code,
+                    level.to_str(),
+                    reset_code,
+                    message,
+                );
+            }
 
             if let Some(ref file) = self.file {
                 if self.should_rotate() {
