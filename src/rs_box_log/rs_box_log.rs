@@ -4,11 +4,9 @@ use std::fs::{File, OpenOptions, create_dir_all, rename, remove_file};
 use std::io::Write;
 use std::sync::{Mutex, Arc};
 use std::path::{Path, PathBuf};
-use std::ptr::addr_eq;
 use once_cell::sync::Lazy;
 use pathdiff::diff_paths;
 use backtrace;
-use log::debug;
 
 #[derive(Clone, Copy, Debug)]
 pub enum LogFileSaveType {
@@ -35,16 +33,6 @@ impl LogLevel {
             LogLevel::LogLevelTrace => "TRACE",
         }
     }
-
-    fn to_level_filter(self) -> log::LevelFilter {
-        match self {
-            LogLevel::LogLevelDebug => log::LevelFilter::Debug,
-            LogLevel::LogLevelError => log::LevelFilter::Error,
-            LogLevel::LogLevelWarning => log::LevelFilter::Warn,
-            LogLevel::LogLevelInfo => log::LevelFilter::Info,
-            LogLevel::LogLevelTrace => log::LevelFilter::Trace,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -54,7 +42,6 @@ pub struct LogConfig {
     log_dir: String,
     log_level: LogLevel,
     file_save_days_max: u64,
-    file_save_type: LogFileSaveType,
 }
 
 impl Default for LogConfig {
@@ -72,7 +59,6 @@ impl Default for LogConfig {
             log_dir,
             log_level: LogLevel::LogLevelTrace,
             file_save_days_max: 7,
-            file_save_type: LogFileSaveType::LogFileSaveTypeDays,
         }
     }
 }
@@ -83,33 +69,32 @@ pub struct LoggerManager {
     current_log_path: Mutex<PathBuf>,
 }
 
-
 impl LoggerManager {
     pub fn default() -> Self {
         let config = GLOBAL_LOG_CONFIG.lock().unwrap().clone();
-        LoggerManager::new_with_config(config)
+        LoggerManager::initialize_logger(config)
     }
 
     pub fn new(module_name: &str) -> Self {
         let global_config = GLOBAL_LOG_CONFIG.lock().unwrap().clone();
         let mut new_config = (*global_config).clone();
         new_config.project_name = module_name.to_string();
-        LoggerManager::new_with_config(Arc::new(new_config))
+        LoggerManager::initialize_logger(new_config.into())
     }
 
-    fn new_with_config(config: Arc<LogConfig>) -> Self {
-        let file_path = LoggerManager::get_log_file_path(&config);
-        let log_dir = Path::new(&file_path).parent().unwrap();
-        create_dir_all(log_dir).expect("Failed to create log directory");
+    fn initialize_logger(config: Arc<LogConfig>) -> Self {
+        let file = if config.enable_save_log_file == true {
+            let file_path = LoggerManager::get_log_file_path(&config);
+            let log_dir = Path::new(&file_path).parent().unwrap();
+            create_dir_all(log_dir).expect("Failed to create log directory");
 
-        let file = if config.enable_save_log_file {
             let file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .append(true)
                 .open(&file_path)
                 .expect("Failed to open log file");
-            LoggerManager::create_symlink(&file_path, &config.log_dir);
+            LoggerManager::create_symlink(&file_path, &config);
             Some(Mutex::new(file))
         } else {
             None
@@ -118,7 +103,7 @@ impl LoggerManager {
         LoggerManager {
             config,
             file,
-            current_log_path: Mutex::new(PathBuf::from(file_path)),
+            current_log_path: Mutex::new(PathBuf::new()),
         }
     }
 
@@ -126,13 +111,14 @@ impl LoggerManager {
         let now = Local::now();
         let date_folder = now.format("%Y-%m-%d").to_string();
         let hour = now.format("%H").to_string();
-        format!("{}/{}/{}_{}.log", config.log_dir, date_folder, date_folder, hour)
+        format!("{}/{}/{}/{}_{}.log", config.log_dir, config.project_name, date_folder, date_folder, hour)
     }
 
-    fn create_symlink(target: &str, log_dir: &str) {
-        let link_path = format!("{}/run.log", log_dir);
+    fn create_symlink(target: &str, config: &LogConfig) {
+        let log_dir = format!("{}/{}/run.log", config.log_dir, config.project_name);
+        let link_path = Path::new(&log_dir);
         let target_path = Path::new(target);
-        let relative_target = diff_paths(target_path, Path::new(log_dir)).unwrap();
+        let relative_target = diff_paths(target_path, link_path.parent().unwrap()).unwrap();
 
         if let Ok(existing_target) = std::fs::read_link(&link_path) {
             if existing_target == relative_target {
@@ -161,7 +147,7 @@ impl LoggerManager {
         let now = Local::now();
         let date_folder = now.format("%Y-%m-%d").to_string();
         let hour = now.format("%H").to_string();
-        let log_dir = Path::new(&self.config.log_dir).join(&date_folder);
+        let log_dir = Path::new(&self.config.log_dir).join(&self.config.project_name).join(&date_folder);
 
         // Rotate the log files for the current day
         for i in (0..self.config.file_save_days_max).rev() {
@@ -189,13 +175,15 @@ impl LoggerManager {
             *file_guard = file;
         }
 
-        LoggerManager::create_symlink(&current_log_path, &self.config.log_dir);
+        LoggerManager::create_symlink(&current_log_path, &self.config);
     }
 
     fn should_rotate(&self) -> bool {
         let now = Local::now();
         let log_path = self.current_log_path.lock().unwrap();
-        let log_dir = Path::new(&self.config.log_dir).join(now.format("%Y-%m-%d").to_string());
+        let log_dir = Path::new(&self.config.log_dir)
+            .join(&self.config.project_name)
+            .join(now.format("%Y-%m-%d").to_string());
 
         if log_path.starts_with(&log_dir) {
             false
@@ -203,7 +191,6 @@ impl LoggerManager {
             true
         }
     }
-
 
     fn get_caller_info() -> String {
         let backtrace = backtrace::Backtrace::new();
@@ -306,7 +293,7 @@ impl LoggerManager {
 static GLOBAL_LOG_CONFIG: Lazy<Mutex<Arc<LogConfig>>> = Lazy::new(|| Mutex::new(Arc::new(LogConfig::default())));
 static DEFAULT_LOGGER: Lazy<Mutex<LoggerManager>> = Lazy::new(|| Mutex::new(LoggerManager::default()));
 
-pub fn setup_log_tools(project_name: &str, enable_save_log_file: bool, log_dir: &str, log_level: LogLevel, file_save_days_max: u64, file_save_type: LogFileSaveType, ) {
+pub fn setup_log_tools(project_name: &str, enable_save_log_file: bool, log_dir: &str, log_level: LogLevel, file_save_days_max: u64) {
     let log_dir = if log_dir.is_empty() {
         if cfg!(target_os = "linux") {
             format!("/var/log/{}", project_name)
@@ -323,7 +310,6 @@ pub fn setup_log_tools(project_name: &str, enable_save_log_file: bool, log_dir: 
         log_dir,
         log_level,
         file_save_days_max,
-        file_save_type,
     });
 
     {
@@ -333,7 +319,7 @@ pub fn setup_log_tools(project_name: &str, enable_save_log_file: bool, log_dir: 
 
     {
         let mut logger = DEFAULT_LOGGER.lock().unwrap();
-        *logger = LoggerManager::new_with_config(new_config);
+        *logger = LoggerManager::initialize_logger(new_config);
     }
 }
 

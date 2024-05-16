@@ -49,7 +49,7 @@ pub fn rs_box_setup(project_name: &str, run_mode: RunMode, product_log_dir: &str
         _ => crate::rs_box_log::rs_box_log::LogLevel::LogLevelDebug,
     };
 
-    crate::rs_box_log::rs_box_log::setup_log_tools("test_project",enable_save_log_file,product_log_dir,rs_box_log::rs_box_log::LogLevel::LogLevelDebug,7,rs_box_log::rs_box_log::LogFileSaveType::LogFileSaveTypeDays);
+    crate::rs_box_log::rs_box_log::setup_log_tools("test_project",enable_save_log_file,product_log_dir,rs_box_log::rs_box_log::LogLevel::LogLevelDebug,7);
 
     unsafe {
         CURRENT_RUN_MODE = run_mode;

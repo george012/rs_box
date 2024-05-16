@@ -1,8 +1,9 @@
+#[cfg(test)]
 use super::rs_box_log;
 #[test]
 fn test_logs_with_write_logfile() {
 
-    rs_box_log::setup_log_tools("test_project",true,"",rs_box_log::LogLevel::LogLevelDebug,7,rs_box_log::LogFileSaveType::LogFileSaveTypeDays);
+    rs_box_log::setup_log_tools("test_project",true,"",rs_box_log::LogLevel::LogLevelDebug,7);
     rs_box_log::log_info("This is an info message");
     rs_box_log::log_error("This is an error message");
     rs_box_log::log_warning("This is an warning message");
@@ -32,7 +33,7 @@ fn test_logs_with_write_logfile() {
 
 #[test]
 fn test_logs_with_terminal_show() {
-    rs_box_log::setup_log_tools("test_terminal_show",false,"",rs_box_log::LogLevel::LogLevelDebug,7,rs_box_log::LogFileSaveType::LogFileSaveTypeDays);
+    rs_box_log::setup_log_tools("test_terminal_show",false,"",rs_box_log::LogLevel::LogLevelDebug,7);
     rs_box_log::log_info("This is an info message", );
     rs_box_log::log_error("This is an error message");
     rs_box_log::log_warning("This is an warning message");
@@ -63,7 +64,7 @@ fn test_logs_with_terminal_show() {
 
 #[test]
 fn test_simple_log_output() {
-    rs_box_log::setup_log_tools("test_simple", false, "./logs", rs_box_log::LogLevel::LogLevelDebug, 7, rs_box_log::LogFileSaveType::LogFileSaveTypeDays);
+    rs_box_log::setup_log_tools("test_simple", false, "./logs", rs_box_log::LogLevel::LogLevelDebug, 7);
     rs_box_log::log_info("This is a debug message info");
     rs_box_log::log_error("This is a debug message err");
     rs_box_log::log_warning("This is a debug message war");
