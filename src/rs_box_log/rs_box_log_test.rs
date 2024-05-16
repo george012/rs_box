@@ -15,7 +15,7 @@ fn test_logs_with_write_logfile() {
         let handle = std::thread::spawn(move || {
             rs_box_log::log_info(format!("main log test at thread {}", i).as_str(), );
 
-            let a_sub_log_mg = rs_box_log::LoggerManager::new_log_manager(format!("test_thread_{}",i).as_str());
+            let a_sub_log_mg = rs_box_log::LoggerManager::new(format!("test_thread_{}",i).as_str());
             a_sub_log_mg.log_info_f(format!("a sub write file warning {}",i).as_str());
             a_sub_log_mg.log_warning_f(format!("a sub write file warning {}",i).as_str());
             a_sub_log_mg.log_error_f(format!("a sub write file error {}",i).as_str());
@@ -46,7 +46,7 @@ fn test_logs_with_terminal_show() {
         let handle = std::thread::spawn(move || {
             rs_box_log::log_info(format!("main-show log test at thread {}", i).as_str(), );
 
-            let a_sub_log_mg = rs_box_log::LoggerManager::new_log_manager(format!("sub_test_terminal_show_{}",i).as_str());
+            let a_sub_log_mg = rs_box_log::LoggerManager::new(format!("sub_test_terminal_show_{}",i).as_str());
             a_sub_log_mg.log_info_f("a sub write file info");
             a_sub_log_mg.log_warning_f("a sub write file warning");
             a_sub_log_mg.log_error_f("a sub write file error");
@@ -76,4 +76,5 @@ fn test_none_setup_status() {
     rs_box_log::log_info("This is a debug message with none setup status   info ");
     rs_box_log::log_warning("This is a debug message with none setup status warning");
     rs_box_log::log_error("This is a debug message with none setup status   error");
+    rs_box_log::log_trace("This is a debug message with none setup status   trace");
 }

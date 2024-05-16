@@ -1,218 +1,278 @@
-use std::fs;
-use std::sync::{Arc, Mutex};
-use lazy_static::lazy_static;
-use slog::{Drain, Logger, o, Record, Serializer};
-use slog_async::Async;
-use slog_term::{CompactFormat, TermDecorator, PlainDecorator};
-use std::fs::OpenOptions;
+use chrono::Local;
+use std::fs::{File, OpenOptions, create_dir_all, rename, remove_file};
+use std::io::Write;
+use std::sync::{Mutex, Arc};
+use std::path::{Path, PathBuf};
+use once_cell::sync::Lazy;
+use pathdiff::diff_paths;
+use backtrace;
 
-
-lazy_static! {
-    static ref GLOBAL_LOG_CONFIG: Mutex<LogConfig> = Mutex::new(LogConfig::default());
-    static ref DEFAULT_LOGGER: Arc<LoggerManager> = Arc::new(LoggerManager::new_log_manager("main"));
-}
-
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub enum LogLevel {
-    LogLevelDebug,
-    LogLevelError,
-    LogLevelWarning,
-    LogLevelInfo,
-    LogLevelTrace,
-}
-
-impl LogLevel {
-    fn to_slog_level(self) -> slog::Level {
-        match self {
-            LogLevel::LogLevelDebug =>  slog::Level::Debug,
-            LogLevel::LogLevelError =>  slog::Level::Error,
-            LogLevel::LogLevelWarning =>  slog::Level::Warning,
-            LogLevel::LogLevelInfo =>  slog::Level::Info,
-            LogLevel::LogLevelTrace =>  slog::Level::Trace,
-        }
-    }
-}
-
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum LogFileSaveType {
     LogFileSaveTypeDays,
     LogFileSaveTypeHours,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub enum LogLevel {
+    LogLevelInfo,
+    LogLevelWarning,
+    LogLevelError,
+    LogLevelDebug,
+    LogLevelTrace,
+}
+
+impl LogLevel {
+    fn to_str(&self) -> &'static str {
+        match self {
+            LogLevel::LogLevelInfo => "INFO",
+            LogLevel::LogLevelWarning => "WARNING",
+            LogLevel::LogLevelError => "ERROR",
+            LogLevel::LogLevelDebug => "DEBUG",
+            LogLevel::LogLevelTrace => "TRACE",
+        }
+    }
+
+    fn to_level_filter(self) -> log::LevelFilter {
+        match self {
+            LogLevel::LogLevelDebug => log::LevelFilter::Debug,
+            LogLevel::LogLevelError => log::LevelFilter::Error,
+            LogLevel::LogLevelWarning => log::LevelFilter::Warn,
+            LogLevel::LogLevelInfo => log::LevelFilter::Info,
+            LogLevel::LogLevelTrace => log::LevelFilter::Trace,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct LogConfig {
-    project_name:           String,
-    enable_save_log_file:   bool,
-    log_dir:                String,
-    log_level:              LogLevel,
-    log_file_save_type:     LogFileSaveType,
-    log_file_save_days_max: u64,
+    project_name: String,
+    enable_save_log_file: bool,
+    log_dir: String,
+    log_level: LogLevel,
+    file_save_days_max: u64,
+    file_save_type: LogFileSaveType,
 }
 
 impl Default for LogConfig {
     fn default() -> Self {
-        let mut project_name: &str = "default";
-        let mut log_dir: String = String::new();
-
-        if cfg!(target_os = "linux") {
-            log_dir = format!("/var/log/{}",project_name);
+        let project_name = "default";
+        let log_dir = if cfg!(target_os = "linux") {
+            format!("/var/log/{}", project_name)
         } else {
-            log_dir = format!("./logs");
-        }
+            "./logs".to_string()
+        };
 
         LogConfig {
             project_name: project_name.to_string(),
             enable_save_log_file: false,
-            log_dir: log_dir.to_string(),
-            log_level: LogLevel::LogLevelInfo,
-            log_file_save_type: LogFileSaveType::LogFileSaveTypeDays,
-            log_file_save_days_max: 7,
+            log_dir,
+            log_level: LogLevel::LogLevelTrace,
+            file_save_days_max: 7,
+            file_save_type: LogFileSaveType::LogFileSaveTypeDays,
         }
     }
 }
-
 
 pub struct LoggerManager {
-    logger:     slog::Logger,
-}
-
-
-fn create_slog_logger_terminal() -> slog::Logger {
-    let decorator = slog_term::TermDecorator::new().stdout().build();
-    let drain = slog_term::CompactFormat::new(decorator)
-        .use_custom_timestamp(custom_timestamp)
-        .build()
-        .fuse();
-
-    let sync_drain = slog_async::Async::new(drain)
-        .build()
-        .fuse();
-
-    slog::Logger::root(sync_drain,  slog::o!())
-}
-
-fn create_slog_logger_write_file(file: std::fs::File) -> slog::Logger {
-    let decorator = slog_term::PlainDecorator::new(file);
-
-    let drain = slog_term::FullFormat::new(decorator)
-        .use_custom_timestamp(custom_timestamp)
-        .build()
-        .fuse();
-
-    let drain_file =  slog_async::Async::new(drain)
-        .build()
-        .fuse();
-
-    slog::Logger::root(drain_file, slog::o!())
-}
-
-fn custom_timestamp(w: &mut dyn std::io::Write) -> std::io::Result<()> {
-    write!(w, "{}", chrono::prelude::Utc::now().format("UTC %Y-%m-%d_%H:%M:%S"))
-}
-
-// Allow independent configuration
-fn new_log_manager_with_config(config: LogConfig, model_name: &str) -> LoggerManager {
-    let logger = if config.enable_save_log_file {
-        let file_path = format!("{}/{}/run.log", config.log_dir, model_name);
-
-        // 确保日志目录存在
-        if let Some(parent) = std::path::Path::new(&file_path).parent() {
-            if std::fs::create_dir_all(parent).is_err() {
-                eprintln!("Failed to create log directory: {}", parent.display());
-            }
-        }
-
-        // 尝试打开文件
-        match std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&file_path) {
-            Ok(file) => create_slog_logger_write_file(file),
-            Err(e) => {
-                eprintln!("Failed to open log file '{}': {}", file_path, e);
-                create_slog_logger_terminal() // Fallback to terminal logging
-            }
-        }
-    } else {
-        create_slog_logger_terminal()
-    };
-
-    LoggerManager {
-        logger,
-    }
+    config: Arc<LogConfig>,
+    file: Option<Mutex<File>>,
+    current_log_path: Mutex<PathBuf>,
 }
 
 impl LoggerManager {
-    pub fn new_log_manager(model_name: &str) -> LoggerManager {
+    pub fn default() -> Self {
         let config = GLOBAL_LOG_CONFIG.lock().unwrap().clone();
+        LoggerManager::new_with_config(config)
+    }
 
-        let mut a_logger = create_slog_logger_terminal();
+    pub fn new(module_name: &str) -> Self {
+        let global_config = GLOBAL_LOG_CONFIG.lock().unwrap().clone();
+        let mut new_config = (*global_config).clone();
+        new_config.project_name = module_name.to_string();
+        LoggerManager::new_with_config(Arc::new(new_config))
+    }
 
-        if config.enable_save_log_file {
-            let file_path = format!("{}/{}/run.log", config.log_dir, model_name);
-            // 确保日志目录存在
-            if let Some(parent) = std::path::Path::new(&file_path).parent() {
-                if std::fs::create_dir_all(parent).is_err() {
-                    eprintln!("Failed to create log directory: {}", parent.display());
-                }
-            }
+    fn new_with_config(config: Arc<LogConfig>) -> Self {
+        let file_path = LoggerManager::get_log_file_path(&config);
+        let log_dir = Path::new(&file_path).parent().unwrap();
+        create_dir_all(log_dir).expect("Failed to create log directory");
+
+        let file = if config.enable_save_log_file {
             let file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .append(true)
-                .open(file_path)
-                .expect("Unable to open log file");
-
-            a_logger = create_slog_logger_write_file(file);
-
-        }
+                .open(&file_path)
+                .expect("Failed to open log file");
+            LoggerManager::create_symlink(&file_path, &config.log_dir);
+            Some(Mutex::new(file))
+        } else {
+            None
+        };
 
         LoggerManager {
-            logger:a_logger,
+            config,
+            file,
+            current_log_path: Mutex::new(PathBuf::from(file_path)),
         }
     }
 
-    fn log_format(&self, message: &str,a_log_level: LogLevel) {
+    fn get_log_file_path(config: &LogConfig) -> String {
+        let now = Local::now();
+        let date_folder = now.format("%Y-%m-%d").to_string();
+        let hour = now.format("%H").to_string();
+        format!("{}/{}/{}_{}.log", config.log_dir, date_folder, date_folder, hour)
+    }
 
-        match a_log_level{
-            LogLevel::LogLevelDebug => {
-                slog::debug!(self.logger, "{}", message);
+    fn create_symlink(target: &str, log_dir: &str) {
+        let link_path = format!("{}/run.log", log_dir);
+        let target_path = Path::new(target);
+        let relative_target = diff_paths(target_path, Path::new(log_dir)).unwrap();
+
+        if let Ok(existing_target) = std::fs::read_link(&link_path) {
+            if existing_target == relative_target {
+                return; // 当前符号链接已指向目标路径，无需重新创建
             }
-            LogLevel::LogLevelError => {
-                slog::error!(self.logger, "{}", message);
+        }
+
+        let _ = remove_file(&link_path);
+        if let Err(e) = std::os::unix::fs::symlink(relative_target, link_path) {
+            eprintln!("Failed to create symlink: {}", e);
+        }
+    }
+
+    fn rotate_files(&self) {
+        let now = Local::now();
+        let date_folder = now.format("%Y-%m-%d").to_string();
+        let hour = now.format("%H").to_string();
+        let log_dir = Path::new(&self.config.log_dir).join(&date_folder);
+
+        // Rotate the log files for the current day
+        for i in (0..self.config.file_save_days_max).rev() {
+            let src = log_dir.join(format!("{}_{}.log", date_folder, i));
+            let dst = log_dir.join(format!("{}_{}.log", date_folder, i + 1));
+            if src.exists() {
+                let _ = rename(src, dst);
             }
-            LogLevel::LogLevelWarning => {
-                slog::warn!(self.logger, "{}", message);
+        }
+
+        let current_log_path = format!("{}/{}_{}.log", log_dir.display(), date_folder, hour);
+        let mut log_path = self.current_log_path.lock().unwrap();
+        *log_path = PathBuf::from(&current_log_path);
+
+        // Create a new log file
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&current_log_path)
+            .expect("Failed to open log file");
+
+        if let Some(ref file_lock) = self.file {
+            let mut file_guard = file_lock.lock().unwrap();
+            *file_guard = file;
+        }
+
+        LoggerManager::create_symlink(&current_log_path, &self.config.log_dir);
+    }
+
+    fn should_rotate(&self) -> bool {
+        let now = Local::now();
+        let log_path = self.current_log_path.lock().unwrap();
+        let log_dir = Path::new(&self.config.log_dir).join(now.format("%Y-%m-%d").to_string());
+
+        if log_path.starts_with(&log_dir) {
+            false
+        } else {
+            true
+        }
+    }
+
+
+    fn get_caller_info() -> String {
+        let backtrace = backtrace::Backtrace::new();
+        for frame in backtrace.frames().iter().skip(1) { // 跳过第一个堆栈帧
+            for symbol in frame.symbols() {
+                if let Some(name) = symbol.name() {
+                    let name_str = name.to_string();
+                    if !name_str.contains("log_format") && !name_str.contains("LoggerManager") {
+                        return format!(
+                            "{}:{}",
+                            symbol.filename().unwrap_or_else(|| std::path::Path::new("unknown")).display(),
+                            symbol.lineno().unwrap_or(0)
+                        );
+                    }
+                }
             }
-            LogLevel::LogLevelInfo => {
-                slog::info!(self.logger, "{}", message);
-            }
-            LogLevel::LogLevelTrace => {
-                slog::trace!(self.logger, "{}", message);
+        }
+        "unknown".to_string()
+    }
+
+    fn log_format(&self, level: LogLevel, message: &str) {
+        if level as u8 <= self.config.log_level as u8 {
+            let now = chrono::Utc::now();
+            let color_code = match level {
+                LogLevel::LogLevelInfo => "\x1b[32m",    // 绿色
+                LogLevel::LogLevelWarning => "\x1b[33m", // 黄色
+                LogLevel::LogLevelError => "\x1b[31m",   // 红色
+                LogLevel::LogLevelDebug => "\x1b[36m",   // 青色
+                LogLevel::LogLevelTrace => "\x1b[34m",   // 蓝色
+            };
+            let reset_code = "\x1b[0m"; // 重置颜色
+
+            let location_info = LoggerManager::get_caller_info();
+
+            let log_message = format!(
+                "[{}] {}[{}]{} [--{}] [location: {}]\n",
+                now.format("%Y-%m-%d %H:%M:%S %:z"),
+                color_code,
+                level.to_str(),
+                reset_code,
+                message,
+                location_info,
+            );
+
+            if let Some(ref file) = self.file {
+                if self.should_rotate() {
+                    self.rotate_files();
+                }
+                let mut file = file.lock().unwrap();
+                file.write_all(log_message.as_bytes()).unwrap();
+            } else {
+                print!("{}", log_message);
             }
         }
     }
+
     pub fn log_info_f(&self, message: &str) {
-        self.log_format(message,self::LogLevel::LogLevelInfo);
+        self.log_format(LogLevel::LogLevelInfo, message);
     }
+
     pub fn log_warning_f(&self, message: &str) {
-        self.log_format(message,self::LogLevel::LogLevelWarning);
+        self.log_format(LogLevel::LogLevelWarning, message);
     }
+
     pub fn log_error_f(&self, message: &str) {
-        self.log_format(message,self::LogLevel::LogLevelError);
+        self.log_format(LogLevel::LogLevelError, message);
     }
+
     pub fn log_debug_f(&self, message: &str) {
-        self.log_format(message,self::LogLevel::LogLevelDebug);
+        self.log_format(LogLevel::LogLevelDebug, message);
     }
+
     pub fn log_trace_f(&self, message: &str) {
-        self.log_format(message,self::LogLevel::LogLevelTrace);
+        self.log_format(LogLevel::LogLevelTrace, message);
     }
 }
 
-pub fn setup_log_tools(product_name: &str, enable_save_log_file: bool, log_dir: &str, log_level: LogLevel, log_file_save_days_max: u64, log_file_save_type: LogFileSaveType) {
-    let a_log_dir = if log_dir.is_empty() {
+static GLOBAL_LOG_CONFIG: Lazy<Mutex<Arc<LogConfig>>> = Lazy::new(|| Mutex::new(Arc::new(LogConfig::default())));
+static DEFAULT_LOGGER: Lazy<Mutex<LoggerManager>> = Lazy::new(|| Mutex::new(LoggerManager::default()));
+
+pub fn setup_log_tools(project_name: &str, enable_save_log_file: bool, log_dir: &str, log_level: LogLevel, file_save_days_max: u64, file_save_type: LogFileSaveType, ) {
+    let log_dir = if log_dir.is_empty() {
         if cfg!(target_os = "linux") {
-            format!("/var/log/{}", product_name)
+            format!("/var/log/{}", project_name)
         } else {
             "./logs".to_string()
         }
@@ -220,31 +280,50 @@ pub fn setup_log_tools(product_name: &str, enable_save_log_file: bool, log_dir: 
         log_dir.to_string()
     };
 
-    // 更新 GLOBAL_LOG_CONFIG 中的配置
-    let mut config_global = GLOBAL_LOG_CONFIG.lock().unwrap();
-    config_global.project_name = product_name.to_string();
-    config_global.log_dir = a_log_dir.to_string();
-    config_global.enable_save_log_file = enable_save_log_file;
-    config_global.log_level = log_level;
-    config_global.log_file_save_type = log_file_save_type;
-    config_global.log_file_save_days_max = log_file_save_days_max;
+    let new_config = Arc::new(LogConfig {
+        project_name: project_name.to_string(),
+        enable_save_log_file,
+        log_dir,
+        log_level,
+        file_save_days_max,
+        file_save_type,
+    });
+
+    {
+        let mut config = GLOBAL_LOG_CONFIG.lock().unwrap();
+        *config = new_config.clone();
+    }
+
+    {
+        let mut logger = DEFAULT_LOGGER.lock().unwrap();
+        *logger = LoggerManager::new_with_config(new_config);
+    }
+}
+
+fn with_default_logger<F>(log_function: F)
+    where
+        F: FnOnce(&LoggerManager),
+{
+    let logger = DEFAULT_LOGGER.lock().unwrap();
+    log_function(&*logger);
 }
 
 pub fn log_info(message: &str) {
-    DEFAULT_LOGGER.log_info_f(message);
+    with_default_logger(|logger| logger.log_info_f(message));
 }
 
 pub fn log_warning(message: &str) {
-    DEFAULT_LOGGER.log_warning_f(message);
+    with_default_logger(|logger| logger.log_warning_f(message));
 }
 
 pub fn log_error(message: &str) {
-    DEFAULT_LOGGER.log_error_f(message);
+    with_default_logger(|logger| logger.log_error_f(message));
 }
+
 pub fn log_debug(message: &str) {
-    DEFAULT_LOGGER.log_debug_f(message);
+    with_default_logger(|logger| logger.log_debug_f(message));
 }
 
 pub fn log_trace(message: &str) {
-    DEFAULT_LOGGER.log_trace_f(message);
+    with_default_logger(|logger| logger.log_trace_f(message));
 }
