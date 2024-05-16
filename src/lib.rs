@@ -56,12 +56,13 @@ pub fn rs_box_setup(project_name: &str, run_mode: RunMode, product_log_dir: &str
     }
 
     println!("Rust Developer Tool Box Setup End");
-    println!("project_name=[{}]", project_name);
-    println!("RunMode=[{}]", run_mode.to_string());
-    println!("LogLevel=[{:?}]", log_level);
-    println!("main_log_dir=[{}]", product_log_dir.to_string());
-    println!("log_save_days_max=[{}]", log_max_save_days);
-    println!("Http_request_timeout=[{} Second]", http_request_timeout);
+    println!("project    name  =[v{}]", project_name);
+    println!("rs_box  version  =[{}]", get_version().unwrap().as_str());
+    println!("Run        Mode  =[{}]", run_mode.to_string());
+    println!("Log       Level  =[{:?}]", log_level);
+    println!("default log dir  =[{}]", product_log_dir.to_string());
+    println!("log save days max=[{}]", log_max_save_days);
+    println!("http req timeout =[{} Second]", http_request_timeout);
 }
 
 pub fn get_version() -> Result<String, Box<dyn std::error::Error>>{
