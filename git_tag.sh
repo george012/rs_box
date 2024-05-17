@@ -125,18 +125,24 @@ function git_handle_push() {
     && git tag -d v$pre_del_version_no
 }
 
-handle_input(){
+function generate_changelog() {
+    git-chglog -o CHANGELOG.md
+    git add CHANGELOG.md
+    git commit -m "Update changelog for ${NEXT_VERSION}"
+}
+
+handle_input() {
     if [[ $1 == "-get_pre_del_tag_name" ]]; then
         pre_tag=$(get_pre_del_version_no "${CURRENT_VERSION}")
-        echo "Pre Del Tag With " "$pre_tag"
+        echo $pre_tag
     elif [ -z "$1" ] || [ "$1" == "auto" ]; then
-
         if to_run "$1"; then
             git_handle_ready
+            generate_changelog
             git_handle_push
-            echo "Complated"
+            echo "Completed"
         else
-            echo "Invalid argument normal"
+            echo "Invalid argument"
         fi
     else
         echo "Invalid argument"

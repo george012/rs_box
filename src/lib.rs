@@ -9,6 +9,8 @@
 
 mod lib_tests;
 pub mod rs_box_log;
+mod block_chain;
+
 use std::fs;
 use toml::Value;
 
