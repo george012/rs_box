@@ -2,33 +2,36 @@
 
 set -e
 
-ProductName=$(grep name ./Cargo.toml | awk -F '"' '{print $2}' | sed 's/\"//g' | head -n 1)
-Product_version_key="version"
+Config_file=./src/lib.rs
+ProductName=$(grep PROJECT_NAME ${Config_file} | awk -F '"' '{print $2}' | sed 's/\"//g')
 REPO_PFEX=george012/$ProductName
-VersionFile=./Cargo.toml
 
-CURRENT_VERSION=$(grep ${Product_version_key} $VersionFile | awk -F '"' '{print $2}' | sed 's/\"//g' | head -n 1)
+Product_version_key="const LIB_VERSION: &str"
+
+CURRENT_VERSION=$(grep ${Product_version_key} ${Config_file} | awk -F '"' '{print $2}' | sed 's/\"//g')
+
 
 NEXT_VERSION=""
 
-OS_TYPE="Unknown"
-GetOSType() {
-    uNames=`uname -s`
+OS_TYPE="unknown"
+get_os_type_with_rust(){
+    uNames=$(uname -s)
     osName=${uNames: 0: 4}
-    if [ "$osName" == "Darw" ] # Darwin
+    if [ "${osName}" == "Darw" ] # Darwin
     then
-        OS_TYPE="Darwin"
-    elif [ "$osName" == "Linu" ] # Linux
+        OS_TYPE="macos"
+    elif [ "${osName}" == "Linu" ] # Linux
     then
-        OS_TYPE="Linux"
-    elif [ "$osName" == "MING" ] # MINGW, windows, git-bash
+        OS_TYPE="linux"
+    elif [ "${osName}" == "MING" ] # MINGW, windows, git-bash
     then
-        OS_TYPE="Windows"
+        OS_TYPE="windows"
     else
-        OS_TYPE="Unknown"
+        OS_TYPE="unknown"
     fi
 }
-GetOSType
+get_os_type_with_rust
+
 
 function to_run() {
     if [ -z "$1" ]; then
@@ -48,7 +51,7 @@ function to_run() {
             base=$((base+1))                        # Increment base version
         fi
 
-        NEXT_VERSION="v${base}.${major}.${minor}"
+        NEXT_VERSION="${base}.${major}.${minor}"
         return 0
     elif [ "$1" == "custom" ]; then
         echo "============================ ${ProductName} ============================"
@@ -97,52 +100,55 @@ function get_pre_del_version_no {
 
 function git_handle_ready() {
     echo "Current Version With "${CURRENT_VERSION}
-    echo "Next Version With "${NEXT_VERSION//v/}
+    echo "Next Version With "${NEXT_VERSION}
 
-    sed -i -e "s/\(${Product_version_key}[[:space:]]*=[[:space:]]*\"\)${CURRENT_VERSION}\"/\1${NEXT_VERSION//v/}\"/" $VersionFile
+#    sed -i -e "s/\(${Product_version_key}[[:space:]]*=[[:space:]]*\"\)${CURRENT_VERSION}\"/\1${NEXT_VERSION}\"/" ${VersionFile}
+    # 修改版本号
+    sed -i -e "s/\(const ${Product_version_key}: &str = \"\).*\(\";\)/\1$NEXT_VERSION\2/" ${Config_file}
+    sed -i -e "s/\(version[[:space:]]*=[[:space:]]*\"\).*\(\";\)/\1${NEXT_VERSION}\2/" ./Cargo.toml
 
-    if [[ $OS_TYPE == "Darwin" ]]; then
+    if [[ $OS_TYPE == "macos" ]]; then
         echo "rm darwin cache"
-        rm -rf $VersionFile"-e"
+        rm -rf ${Config_file}"-e"
+        rm -rf Cargo.toml-e
     fi
 }
 
 function git_handle_push() {
     local current_version_no=${CURRENT_VERSION//v/}
-    local netx_version_no=${NEXT_VERSION//v/}
+    local next_version_no=${NEXT_VERSION//v/}
     local pre_del_version_no=$(get_pre_del_version_no "$current_version_no")
     echo "Pre Del Version With v"${pre_del_version_no}
 
 
     git add . \
-    && git commit -m "Update v${netx_version_no}" \
-    && git push --delete origin latest \
-    && git push \
-    && git tag v$netx_version_no \
-    && git tag -f latest v$netx_version_no \
-    && git push origin v$netx_version_no \
-    && git push origin latest \
-    && git tag -d v$pre_del_version_no
+    && git commit -m "Update v${next_version_no}" \
+    && git tag v${next_version_no} \
+    && git tag -f latest v${next_version_no}
+
+    for remote in $(git remote)
+    do
+        echo "Pushing to ${remote}..."
+        git push --delete ${remote} latest \
+        && git push ${remote} \
+        && git push ${remote} v${next_version_no} \
+        && git push ${remote} latest
+    done
+    git tag -d v${pre_del_version_no}
 }
 
-function generate_changelog() {
-    git-chglog -o CHANGELOG.md
-    git add CHANGELOG.md
-    git commit -m "Update changelog for ${NEXT_VERSION}"
-}
-
-handle_input() {
+handle_input(){
     if [[ $1 == "-get_pre_del_tag_name" ]]; then
         pre_tag=$(get_pre_del_version_no "${CURRENT_VERSION}")
-        echo $pre_tag
+        echo "Pre Del Tag With " "$pre_tag"
     elif [ -z "$1" ] || [ "$1" == "auto" ]; then
+
         if to_run "$1"; then
             git_handle_ready
-            generate_changelog
             git_handle_push
-            echo "Completed"
+            echo "Complated"
         else
-            echo "Invalid argument"
+            echo "Invalid argument normal"
         fi
     else
         echo "Invalid argument"

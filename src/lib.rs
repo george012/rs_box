@@ -9,10 +9,12 @@
 
 mod lib_tests;
 pub mod rs_box_log;
-mod block_chain;
+pub mod block_chain;
 
 use std::fs;
 use toml::Value;
+
+const LIB_VERSION: &str = "0.0.21";
 
 #[derive(Clone, Copy, Debug,PartialEq)]
 pub enum RunMode {
@@ -58,32 +60,15 @@ pub fn rs_box_setup(project_name: &str, run_mode: RunMode, product_log_dir: &str
     }
 
     println!("Rust Developer Tool Box Setup End");
-    println!("project    name  =[v{}]", project_name);
-    println!("rs_box  version  =[{}]", get_version().unwrap().as_str());
+    println!("project    name  =[{}]", project_name);
+    println!("rs_box  version  =[v{}]", LIB_VERSION);
     println!("Run        Mode  =[{}]", run_mode.to_string());
-    println!("Log       Level  =[{:?}]", log_level);
-    println!("default log dir  =[{}]", product_log_dir.to_string());
+    println!("Log       Level  =[{}]", log_level.to_str());
+    println!("default log dir  =[{}]", product_log_dir);
     println!("log save days max=[{}]", log_max_save_days);
     println!("http req timeout =[{} Second]", http_request_timeout);
 }
 
-pub fn get_version() -> Result<String, Box<dyn std::error::Error>>{
-    // 读取当前目录下的 Cargo.toml 文件
-    let contents = fs::read_to_string("Cargo.toml")?;
-
-    // 解析 TOML 内容
-    let parsed = contents.parse::<Value>()?;
-
-    // 尝试从解析后的 TOML 数据中获取版本号
-    let version = parsed
-        .get("package")
-        .and_then(|pkg| pkg.get("version"))
-        .and_then(|v| v.as_str())
-        .ok_or("Version not found or is not a string")?
-        .to_string();
-
-    Ok(version)
-}
 
 
 
