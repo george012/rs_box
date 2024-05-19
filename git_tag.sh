@@ -104,8 +104,14 @@ function git_handle_ready() {
 
 #    sed -i -e "s/\(${Product_version_key}[[:space:]]*=[[:space:]]*\"\)${CURRENT_VERSION}\"/\1${NEXT_VERSION}\"/" ${VersionFile}
     # 修改版本号
-    sed -i -e "s/\(const ${Product_version_key}: &str = \"\).*\(\";\)/\1$NEXT_VERSION\2/" ${Config_file}
-    sed -i -e "s/\(version[[:space:]]*=[[:space:]]*\"\).*\(\";\)/\1${NEXT_VERSION}\2/" ./Cargo.toml
+#    sed -i -e "s/\(${Product_version_key}[[:space:]]*=[[:space:]]*\"\).*\(\";\)/\1${NEXT_VERSION}\2/" ${Config_file}
+    # 修改 lib.rs 文件中的版本号
+    sed -i -e "s/\(${Product_version_key} = \"\).*\(\";\)/\1${NEXT_VERSION}\2/" ${Config_file}
+
+    # 修改 Cargo.toml 文件中的版本号
+    sed -i -e "s/^version[[:space:]]*=[[:space:]]*\"[^\"]*\"/version = \"${NEXT_VERSION}\"/" ./Cargo.toml \
+    && cargo update \
+    && wait
 
     if [[ $OS_TYPE == "macos" ]]; then
         echo "rm darwin cache"

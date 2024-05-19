@@ -14,7 +14,7 @@ pub mod block_chain;
 use std::fs;
 use toml::Value;
 
-const LIB_VERSION: &str = "0.0.21";
+const LIB_VERSION: &str = "0.0.23";
 
 #[derive(Clone, Copy, Debug,PartialEq)]
 pub enum RunMode {

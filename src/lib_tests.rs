@@ -1,7 +1,9 @@
+
+
 #[test]
 fn test_get_version() {
-    let version = crate::get_version().unwrap();
-    println!("v{}", version.to_string());
+    let version = crate::LIB_VERSION;
+    println!("{}", version.to_string());
 }
 
 #[test]
