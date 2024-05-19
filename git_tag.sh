@@ -102,14 +102,11 @@ function git_handle_ready() {
     echo "Current Version With "${CURRENT_VERSION}
     echo "Next Version With "${NEXT_VERSION}
 
-#    sed -i -e "s/\(${Product_version_key}[[:space:]]*=[[:space:]]*\"\)${CURRENT_VERSION}\"/\1${NEXT_VERSION}\"/" ${VersionFile}
-    # 修改版本号
-#    sed -i -e "s/\(${Product_version_key}[[:space:]]*=[[:space:]]*\"\).*\(\";\)/\1${NEXT_VERSION}\2/" ${Config_file}
     # 修改 lib.rs 文件中的版本号
-    sed -i -e "s/\(${Product_version_key} = \"\).*\(\";\)/\1${NEXT_VERSION}\2/" ${Config_file}
+    sed -i -e "0,/${Product_version_key} = \".*\";/s//${Product_version_key} = \"${NEXT_VERSION}\";/" ${Config_file}
 
     # 修改 Cargo.toml 文件中的版本号
-    sed -i -e "s/^version[[:space:]]*=[[:space:]]*\"[^\"]*\"/version = \"${NEXT_VERSION}\"/" ./Cargo.toml \
+    sed -i -e "0,/^version[[:space:]]*=[[:space:]]*\"[^\"]*\"/s//version = \"${NEXT_VERSION}\"/" ./Cargo.toml \
     && cargo update \
     && wait
 
