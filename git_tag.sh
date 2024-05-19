@@ -3,13 +3,12 @@
 set -e
 
 Config_file=./src/lib.rs
-ProductName=$(grep PROJECT_NAME ${Config_file} | awk -F '"' '{print $2}' | sed 's/\"//g')
+ProductName=$(grep PROJECT_NAME ${Config_file} | head -n 1 | awk -F '"' '{print $2}' | sed 's/\"//g')
 REPO_PFEX=george012/$ProductName
 
-Product_version_key="const LIB_VERSION: &str"
+Product_version_key="LIB_VERSION"
 
-CURRENT_VERSION=$(grep ${Product_version_key} ${Config_file} | awk -F '"' '{print $2}' | sed 's/\"//g')
-
+CURRENT_VERSION=$(grep "${Product_version_key}" "${Config_file}" | head -n 1 | awk -F '"' '{print $2}' | sed 's/\"//g')
 
 NEXT_VERSION=""
 
@@ -103,10 +102,9 @@ function git_handle_ready() {
     echo "Next Version With "${NEXT_VERSION}
 
     # 修改 lib.rs 文件中的版本号
-    sed -i -e "0,/${Product_version_key} = \".*\";/s//${Product_version_key} = \"${NEXT_VERSION}\";/" ${Config_file}
-
+    sed -i -e "s/\(const ${Product_version_key}: &str = \"\).*\(\";\)/\1${NEXT_VERSION}\2/" ${Config_file}
     # 修改 Cargo.toml 文件中的版本号
-    sed -i -e "0,/^version[[:space:]]*=[[:space:]]*\"[^\"]*\"/s//version = \"${NEXT_VERSION}\"/" ./Cargo.toml \
+    sed -i -e "s/^version[[:space:]]*=[[:space:]]*\"[^\"]*\"/version = \"${NEXT_VERSION}\"/" ./Cargo.toml \
     && cargo update \
     && wait
 
