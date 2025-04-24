@@ -8,13 +8,14 @@
 #![allow(clippy::arc_with_non_send_sync)]
 
 mod lib_tests;
-pub mod rs_box_log;
 pub mod block_chain;
 
+pub mod rs_box_log;
+pub use rs_box_log::*;
 use std::fs;
 use toml::Value;
 
-const LIB_VERSION: &str = "0.0.27";
+const LIB_VERSION: &str = "0.0.28";
 
 #[derive(Clone, Copy, Debug,PartialEq)]
 pub enum RunMode {

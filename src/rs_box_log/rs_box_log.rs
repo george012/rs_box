@@ -323,7 +323,7 @@ pub fn setup_log_tools(project_name: &str, enable_save_log_file: bool, log_dir: 
     }
 }
 
-fn with_default_logger<F>(log_function: F)
+pub fn with_default_logger<F>(log_function: F)
     where
         F: FnOnce(&LoggerManager),
 {
