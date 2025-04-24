@@ -350,3 +350,49 @@ pub fn log_debug(message: &str) {
 pub fn log_trace(message: &str) {
     with_default_logger(|logger| logger.log_trace_f(message));
 }
+
+
+#[macro_export]
+macro_rules! log_infof {
+    ($($arg:tt)*) => {
+        $crate::with_default_logger(|logger| {
+            logger.log_infof(&format!($($arg)*));
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! log_warningf {
+    ($($arg:tt)*) => {
+        $crate::with_default_logger(|logger| {
+            logger.log_warningf(&format!($($arg)*));
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! log_errorf {
+    ($($arg:tt)*) => {
+        $crate::with_default_logger(|logger| {
+            logger.log_errorf(&format!($($arg)*));
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! log_debugf {
+    ($($arg:tt)*) => {
+        $crate::with_default_logger(|logger| {
+            logger.log_debugf(&format!($($arg)*));
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! log_tracef {
+    ($($arg:tt)*) => {
+        $crate::with_default_logger(|logger| {
+            logger.log_tracef(&format!($($arg)*));
+        })
+    };
+}
